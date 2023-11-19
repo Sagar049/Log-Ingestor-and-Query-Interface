@@ -1,0 +1,77 @@
+pip install Flask elasticsearch
+from flask import Flask, request, jsonify
+from elasticsearch import Elasticsearch
+
+app = Flask(__name__)
+es = Elasticsearch()
+
+@app.route('/ingest', methods=['POST'])
+def ingest_log():
+    try:
+        log_data = request.json
+        es.index(index='logs', doc_type='_doc', body=log_data)
+        return jsonify({'message': 'Log ingested successfully'}), 201
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+if __name__ == '__main__':
+    app.run(port=3000)
+
+#Query Interface
+
+from flask import Flask, request, render_template
+from elasticsearch import Elasticsearch
+
+app = Flask(__name__)
+es = Elasticsearch()
+
+@app.route('/search', methods=['GET'])
+def search_logs():
+    try:
+        query = build_query(request.args)
+        result = es.search(index='logs', body=query)
+        hits = result['hits']['hits']
+
+        return render_template('search_results.html', logs=hits)
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+def build_query(args):
+    query = {
+        "query": {
+            "bool": {
+                "must": [],
+            }
+        }
+    }
+
+    for field in ["level", "message", "resourceId", "timestamp", "traceId", "spanId", "commit", "metadata.parentResourceId"]:
+        value = args.get(field)
+        if value:
+            query["query"]["bool"]["must"].append({"match": {field: value}})
+
+    return query
+
+if __name__ == '__main__':
+    app.run(port=3001)
+
+HTML Template (templates/search_results.html):
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Log Search Results</title>
+</head>
+<body>
+    <h1>Log Search Results</h1>
+    <ul>
+        {% for log in logs %}
+            <li>{{ log._source }}</li>
+        {% endfor %}
+    </ul>
+</body>
+</html>
+
